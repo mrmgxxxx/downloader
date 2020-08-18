@@ -180,7 +180,9 @@ func (d *Downloader) downloadRange(partN int, start int64, end int64) error {
 		}
 
 		// count written bytes num.
-		d.limiter.Wait(written)
+		if d.limiter != nil {
+			d.limiter.Wait(written)
+		}
 
 		// read file range datas.
 		rn, err := body.Read(buf)
