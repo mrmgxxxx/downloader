@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,6 +16,9 @@ import (
 const (
 	// defaultConcurrent is default concurrent num.
 	defaultConcurrent = 1
+
+	// maxGCroutineNum is max gcroutine num.
+	maxGCroutineNum = 100
 )
 
 // Downloader is http ranges downloader.
@@ -37,6 +41,13 @@ type Downloader struct {
 	// concurrent is download range handler concurrent num.
 	concurrent int
 
+	// limiter is download rate limiter, not limit if it's nil.
+	// NOTE: only for each download gcroutine.
+	limiter Limiter
+
+	// isCanceled is download cancel flag.
+	isCanceled bool
+
 	// finalErr is download action final error.
 	finalErr error
 
@@ -54,13 +65,18 @@ func NewDownloader(url string, concurrent int, headers map[string]string, newFil
 	}
 }
 
+// SetRateLimiterOption setups limiter option.
+func (d *Downloader) SetRateLimiterOption(limiter Limiter) {
+	d.limiter = limiter
+}
+
 // Download starts and downloads target source in ranges mode.
-func (d *Downloader) Download() error {
+func (d *Downloader) Download(timeout time.Duration) error {
 	if len(d.url) == 0 {
 		return errors.New("empty url")
 	}
 
-	if d.concurrent <= 0 {
+	if d.concurrent <= 0 || d.concurrent > maxGCroutineNum {
 		// reset to default concurrent.
 		d.concurrent = defaultConcurrent
 	}
@@ -80,24 +96,32 @@ func (d *Downloader) Download() error {
 	}
 	d.file = file
 
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	// starts download now.
-	d.download()
+	d.download(ctx)
 
 	return d.finalErr
 }
 
 // Clean cleans downloaded or temp files.
 func (d *Downloader) Clean() error {
-	mvFile := base64.StdEncoding.EncodeToString(d.newFile)
+	mvFile := base64.StdEncoding.EncodeToString([]byte(d.newFile))
 	return os.Rename(d.newFile, fmt.Sprintf("/tmp/%s.%d", mvFile, time.Now().UnixNano()))
 }
 
 // download processes http range bytes download action.
-func (d *Downloader) download() {
+func (d *Downloader) download(ctx context.Context) {
 	if d.fileSize < int64(d.concurrent) {
 		// reset to default concurrent.
 		d.concurrent = defaultConcurrent
 	}
+
+	go func() {
+		<-ctx.Done()
+		d.isCanceled = true
+	}()
 
 	// partial size for every download gcroutine.
 	partialSize := d.fileSize / int64(d.concurrent)
@@ -151,6 +175,14 @@ func (d *Downloader) downloadRange(partN int, start int64, end int64) error {
 
 	// keep range and read/write datas.
 	for {
+		if d.isCanceled {
+			return errors.New("download timeout")
+		}
+
+		// count written bytes num.
+		d.limiter.Wait(written)
+
+		// read file range datas.
 		rn, err := body.Read(buf)
 
 		// write data.
