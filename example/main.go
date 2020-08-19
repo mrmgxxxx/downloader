@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	dl "downloader"
+	dl "../../downloader"
 )
 
 var (
@@ -13,15 +13,15 @@ var (
 	headers            = map[string]string{}
 	timeout            = 30 * time.Second
 	concurrent         = 5
-	limitBytesInSecond = 1024 * 1024 * 5 // 5MB
+	limitBytesInSecond = int64(1024 * 1024 * 10) // 10MB
 )
 
 func main() {
 	downloader := dl.NewDownloader(target, concurrent, headers, newFile)
-	downloader.SetRateLimiterOption(&dl.SimpleRateLimiter{LimitNum: limitBytesInSecond})
+	downloader.SetRateLimiterOption(dl.NewSimpleRateLimiter(limitBytesInSecond))
 
 	timenow := time.Now()
-	if err := downloader.Download(timenow); err != nil {
+	if err := downloader.Download(timeout); err != nil {
 		downloader.Clean()
 		panic(err)
 	}

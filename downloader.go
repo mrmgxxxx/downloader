@@ -42,7 +42,6 @@ type Downloader struct {
 	concurrent int
 
 	// limiter is download rate limiter, not limit if it's nil.
-	// NOTE: only for each download gcroutine.
 	limiter Limiter
 
 	// isCanceled is download cancel flag.
@@ -68,6 +67,15 @@ func NewDownloader(url string, concurrent int, headers map[string]string, newFil
 // SetRateLimiterOption setups limiter option.
 func (d *Downloader) SetRateLimiterOption(limiter Limiter) {
 	d.limiter = limiter
+}
+
+// setupRateLimiter setups limiter num base on gcroutines.
+func (d *Downloader) setupRateLimiter() {
+	if d.limiter == nil {
+		return
+	}
+	totalLimitNum := d.limiter.LimitNum()
+	d.limiter.Reset(totalLimitNum / int64(d.concurrent))
 }
 
 // Download starts and downloads target source in ranges mode.
@@ -125,6 +133,9 @@ func (d *Downloader) download(ctx context.Context) {
 
 	// partial size for every download gcroutine.
 	partialSize := d.fileSize / int64(d.concurrent)
+
+	// setup final limit for each gcroutine.
+	d.setupRateLimiter()
 
 	// split for every gcroutine.
 	var start, end int64
