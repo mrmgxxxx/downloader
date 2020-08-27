@@ -102,6 +102,8 @@ func (d *Downloader) Download(timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
+	defer file.Close()
+
 	d.file = file
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -170,15 +172,20 @@ func (d *Downloader) downloadRange(partN int, start int64, end int64) error {
 	// total written bytes num.
 	var written int64
 
+	// download gcroutine done.
+	defer d.syncWG.Done()
+
+	if end < start {
+		// empty range.
+		return nil
+	}
+
 	// http range data, the size is range data size, and the body is http response
 	// body which need to be close by caller.
 	body, size, err := d.rangeData(start, end)
 	if err != nil {
 		return err
 	}
-
-	// download gcroutine done.
-	defer d.syncWG.Done()
 	defer body.Close()
 
 	// make buffer to read and write file data.
