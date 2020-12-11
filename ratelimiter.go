@@ -54,7 +54,7 @@ func (l *SimpleRateLimiter) Wait(readNum int64) {
 	}
 }
 
-// // LimitNum returns the limit num.
+// LimitNum returns the limit num.
 func (l *SimpleRateLimiter) LimitNum() int64 {
 	return l.limitNum
 }
