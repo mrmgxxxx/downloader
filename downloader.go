@@ -14,6 +14,12 @@ import (
 )
 
 const (
+	// defaultSwapBufferSize is default download swap buffer size.
+	defaultSwapBufferSize = 4 * 1024
+
+	// defaultPathToCleanTempFiles is default path to clean temporary files.
+	defaultPathToCleanTempFiles = "/tmp"
+
 	// defaultConcurrent is default concurrent num.
 	defaultConcurrent = 1
 
@@ -118,7 +124,7 @@ func (d *Downloader) Download(timeout time.Duration) error {
 // Clean cleans downloaded or temp files.
 func (d *Downloader) Clean() error {
 	mvFile := base64.StdEncoding.EncodeToString([]byte(d.newFile))
-	return os.Rename(d.newFile, fmt.Sprintf("/tmp/%s.%d", mvFile, time.Now().UnixNano()))
+	return os.Rename(d.newFile, fmt.Sprintf("%s/%s.%d", defaultPathToCleanTempFiles, mvFile, time.Now().UnixNano()))
 }
 
 // download processes http range bytes download action.
@@ -189,7 +195,7 @@ func (d *Downloader) downloadRange(partN int, start int64, end int64) error {
 	defer body.Close()
 
 	// make buffer to read and write file data.
-	buf := make([]byte, 4*1024)
+	buf := make([]byte, defaultSwapBufferSize)
 
 	// keep range and read/write datas.
 	for {
@@ -229,7 +235,7 @@ func (d *Downloader) downloadRange(partN int, start int64, end int64) error {
 			continue
 		}
 
-		if err.Error() != "EOF" {
+		if err != io.EOF {
 			return fmt.Errorf("part[%d] download failed, %+v", partN, err)
 		}
 
